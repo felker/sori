@@ -4,7 +4,7 @@
 #include "cuda.h"
 #include "cuda_runtime.h"
 
-#define TPB 640
+//#define TPB 640
 #define MAX_TREES 300
 #define NFEATURES 8
 #define NPOINTS 200

@@ -13,7 +13,13 @@ sori.o: sori.cpp sori_kernel.h
 
 sori_kernel.o: sori_kernel.cu sori_kernel.h
 	$(NVCC) $(NVCC_FLAGS_M) -c $< -o $@
+
+dprf_test.exe: dprf_test.o dprf.o dprf_kernel.o
+	$(NVCC) $(NVCC_FLAGS_M) $^ -o $@
 	
+dprf_test.o: dprf_test.c dprf.h dprf_kernel.o
+	$(NVCC) $(NVCC_FLAGS_M) -c $< -o $@
+			
 dprf.o: dprf.c dprf.h dprf_kernel.h
 	$(NVCC) $(NVCC_FLAGS_M) -c $< -o $@
 	
