@@ -75,9 +75,23 @@ void fprint_matrix_int(FILE *fp, const int *A, int nr_rows_A, int nr_cols_A) {
 	fprintf(fp,"\n");
 }
 
+int argmax(float *array, int n){
+	int out = 0;
+	for(int i = 0; i < n; ++i){
+		// printf("array[%d] = %f. array[%d] = %f.",i,array[i],out,array[out]);
+		if (array[i]	> array[out]){
+			out = i;
+		}
+	}
+	return out;			 
+}
+
 int main(int argc, char* argv[]) {
   //Set up streams
   const int NSTREAMS = 3;
+  
+  //sizes
+  //const int NPTS = 200;
   cudaStream_t* streams;
   streams = new cudaStream_t[NSTREAMS];
   for(int i=0;i<NSTREAMS; i++)
@@ -386,11 +400,20 @@ int main(int argc, char* argv[]) {
 	  
   	TIME(te1);
   	TIME(ts0);
-  	cudaMemcpy(cpu_result,gpu_result,NLMI * NDIM * sizeof(float),cudaMemcpyDeviceToHost);
+  	cudaMemcpy(cpu_constraints,gpu_constraints,NCON * NDIM * sizeof(float),cudaMemcpyDeviceToHost);
+  	cudaMemcpy(cpu_J_elite, gpu_J_elite, NELITE * sizeof(float), cudaMemcpyDeviceToHost);
   	TIME(te0);
-  	std::cout << "cpu_result =" << std::endl;
-  	print_matrix(cpu_result, NLMI, NDIM);
-  	fprint_matrix(fp,cpu_result, NLMI, NDIM);
+  	std::cout << "cpu_constraints =" << std::endl;
+  	print_matrix(cpu_constraints, NCON, NDIM);
+  	std::cout << "cpu_J_elite =" << std::endl;
+  	print_matrix(cpu_J_elite, NELITE, 1);
+  	int best = argmax(cpu_J_elite, NELITE);
+  	printf("best= %d\n",best);
+  	for (int i=0;i<(NLMI*NDIM);i++){
+  		cpu_result[i] = cpu_constraints[best*(int(floor(NPOP/NELITE)))*(NLMI*NDIM)+i];
+	}
+	print_matrix(cpu_result, NLMI, NDIM);
+  	//fprint_matrix(fp,cpu_result, NLMI, NDIM);
 	//printf("Time taken (1): %f seconds\n",tdiff(ts0,te0));
 	//printf("Time taken (2): %f seconds\n",tdiff(ts1,te1));
 	}//end loop over samples

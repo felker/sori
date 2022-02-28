@@ -5,6 +5,8 @@
 
 #define NSAMPLES 50
 #define NPTS 200
+//#define MAXNPTS 1000
+//#define MAXNCON 400
 #define NDIM 2
 #define TPB 32
 #define NLMI 4
