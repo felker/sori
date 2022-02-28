@@ -12,7 +12,7 @@
 extern "C" {
 typedef cudaStream_t cudaStream_t;
 
-__device__ curandState_t states[NPTS*NCON];
+__device__ curandState_t states[MAXNPTS*MAXNCON];
 
 __device__ float sum_of_squares(float* points, int jrow, int ncol, int nrow)
 {
@@ -59,7 +59,7 @@ __device__ void random_ints(curandState_t state, int* ints_out, int n_ints_out, 
   }
 }
 
-__device__ int find_elite(float* gpu_J)
+__device__ int find_elite(float* gpu_J, int NPOP)
 {
 	int elite = 0;
 	float best_score = gpu_J[0];
@@ -82,7 +82,7 @@ void free_random_states()
 }
 
 /* this GPU kernel function is used to initialize the random states */
-__global__ void init(unsigned int seed) {
+__global__ void init(unsigned int seed, int NPTS, int NCON) {
   int idx = blockIdx.x*blockDim.x + threadIdx.x;
   if (idx < NPTS*NCON){
   		curand_init(seed, /* the seed can be the same for each core, here we pass the time in from the CPU */
@@ -92,8 +92,8 @@ __global__ void init(unsigned int seed) {
   }
 }
 
-void init_launcher(unsigned int seed) {
-	init<<<(NPTS*NCON + TPB -1)/TPB, TPB>>>(seed);
+void init_launcher(unsigned int seed, int NPTS, int NCON, int TPB) {
+	init<<<(NPTS*NCON + TPB -1)/TPB, TPB>>>(seed, NPTS, NCON);
 }
 
 
@@ -107,12 +107,12 @@ __global__ void randoms(float* numbers) {
 /* this GPU kerenel calculates the sum of squares for each of the constraints */
 __global__ void evaluate_constraint_sos(float* constraints, float* constraint_sos, int ncols, int nrows) {
   int idx = blockIdx.x*blockDim.x + threadIdx.x;
-  if (idx<NCON){
+  if (idx<nrows){
   	constraint_sos[idx] = sum_of_squares(constraints, idx, ncols, nrows);
   }
 }
 
-void evaluate_constraint_sos_launcher(float* constraints, float* constraint_sos, cudaStream_t* stream) {
+void evaluate_constraint_sos_launcher(float* constraints, float* constraint_sos, int NDIM, int NCON, int TPB, cudaStream_t* stream) {
   evaluate_constraint_sos<<<(NCON+TPB-1)/TPB, TPB, 0, stream[0]>>>(constraints, constraint_sos, NDIM, NCON);
 }
 
@@ -129,7 +129,7 @@ __global__ void random_points(float* points_out, int ncols, int nrows, float sca
   }
 }
 
-void random_points_launcher(float* points_out, int ncols, int nrows, float scale, float offset, int skip_idx, cudaStream_t* stream)
+void random_points_launcher(float* points_out, int ncols, int nrows, float scale, float offset, int skip_idx, int TPB, cudaStream_t* stream)
 {
   random_points<<<(nrows+TPB-1)/TPB, TPB, 0, stream[0]>>>(points_out, ncols, nrows, scale, offset, skip_idx);
 }
@@ -167,7 +167,7 @@ __global__ void generate_test_points(float* feature_points_out, float* dim_point
   	}
 }
 
-void generate_test_points_launcher(float* feature_points_out, float* dim_points_out, int gn_points, int gn_features, int gn_dim, float* scale, float* offset, int* important_features, cudaStream_t* streams)
+void generate_test_points_launcher(float* feature_points_out, float* dim_points_out, int gn_points, int gn_features, int gn_dim, float* scale, float* offset, int* important_features, int TPB, cudaStream_t* streams)
 {
 	generate_test_points<<<(gn_points+TPB-1)/TPB, TPB, 0, streams[1]>>>(feature_points_out, dim_points_out, gn_points, gn_features, gn_dim, scale, offset, important_features);
 }
@@ -181,7 +181,7 @@ __global__ void evaluate_constraints_satisfied(float* gpu_dot_products, float* g
 	}
 }
 
-void evaluate_constraints_satisfied_launcher(float* gpu_dot_products, float* gpu_constraint_sos, bool* gpu_pt_satisfies_constraint, int nconstraints, int npoints) {
+void evaluate_constraints_satisfied_launcher(float* gpu_dot_products, float* gpu_constraint_sos, bool* gpu_pt_satisfies_constraint, int nconstraints, int npoints, int TPB) {
 	evaluate_constraints_satisfied<<<(nconstraints*npoints+TPB-1)/TPB, TPB>>>(gpu_dot_products, gpu_constraint_sos, gpu_pt_satisfies_constraint, nconstraints, npoints);
 }
 
@@ -224,7 +224,7 @@ __global__ void evaluate_all_constraints_satisfied(bool* gpu_pt_satisfies_constr
   }
 }
 
-void evaluate_all_constraints_satisfied_launcher(bool* gpu_pt_satisfies_constraint, bool* gpu_pt_satisfies_all_constraints, int* nsafe_inside, int* nunsafe_inside, float* disruptivity, float disruptivity_threshold, float weights, float* gpu_J, int npoints, int npopulation, int nlmis, int nconstraints) {
+void evaluate_all_constraints_satisfied_launcher(bool* gpu_pt_satisfies_constraint, bool* gpu_pt_satisfies_all_constraints, int* nsafe_inside, int* nunsafe_inside, float* disruptivity, float disruptivity_threshold, float weights, float* gpu_J, int npoints, int npopulation, int nlmis, int nconstraints, int TPB) {
 	evaluate_all_constraints_satisfied<<<(npoints*npopulation+TPB-1)/TPB, TPB>>>(gpu_pt_satisfies_constraint, gpu_pt_satisfies_all_constraints, nsafe_inside, nunsafe_inside, disruptivity, disruptivity_threshold, weights, gpu_J, npoints, npopulation, nlmis, nconstraints);
 }
 
@@ -236,7 +236,7 @@ __global__ void GpuCopy( float* des , float* __restrict__ sour ,const int M , co
         des[tx]=sour[tx];
 }
 
-void GpuCopy_launcher( float* des , float* __restrict__ sour ,const int M , const int N, cudaStream_t* stream)
+void GpuCopy_launcher( float* des , float* __restrict__ sour ,const int M , const int N, int TPB, cudaStream_t* stream)
 {
 	GpuCopy<<<(M*N+TPB-1)/TPB,TPB, 0, stream[2]>>>(des, sour, M, N);
 }
@@ -269,7 +269,7 @@ __global__ void genetic_select(float* gpu_J, int* tournament_members, int* winne
 	//printf("Thread %d Winner: %d\n",blockIdx.x, winners[blockIdx.x]);
 }
 
-void genetic_select_launcher(float* J, int* tournament_members, int* winners, float* constraints, float* constraints_prev, int npopulation, int ntournament, int nconstraints, int nlmis, int ndimensions, cudaStream_t* stream)
+void genetic_select_launcher(float* J, int* tournament_members, int* winners, float* constraints, float* constraints_prev, int npopulation, int ntournament, int nconstraints, int nlmis, int ndimensions, int TPB, cudaStream_t* stream)
 {
 	genetic_select<<<(npopulation*ntournament+TPB-1)/TPB,TPB,0,stream[1]>>>(J, tournament_members, winners, constraints, constraints_prev, npopulation, ntournament, nconstraints, nlmis, ndimensions);
 }
@@ -301,7 +301,7 @@ __global__ void genetic_mate(float* gpu_constraints, float crossover_prob, int n
 	}
 }
 
-void genetic_mate_launcher(float* constraints, float crossover_prob, int npopulation, int nlmis, int ndimensions, int nconstraints, cudaStream_t* stream)
+void genetic_mate_launcher(float* constraints, float crossover_prob, int npopulation, int nlmis, int ndimensions, int nconstraints, int TPB, int NPOP, cudaStream_t* stream)
 {
 	genetic_mate<<<(NPOP/2+TPB-1)/TPB,TPB,0,stream[1]>>>(constraints, crossover_prob, npopulation, nlmis, ndimensions, nconstraints);
 }
@@ -321,7 +321,7 @@ __global__ void genetic_mutate(float* gpu_constraints, float mutate_prob, float 
 	}
 }
 
-void genetic_mutate_launcher(float* constraints, float mutate_prob, float mutate_stdev, int ncon_m_ndim, cudaStream_t* stream)
+void genetic_mutate_launcher(float* constraints, float mutate_prob, float mutate_stdev, int ncon_m_ndim, int TPB, cudaStream_t* stream)
 {
 	genetic_mutate<<<(ncon_m_ndim+TPB-1)/TPB,TPB,0,stream[1]>>>(constraints, mutate_prob, mutate_stdev, ncon_m_ndim);
 }
@@ -341,7 +341,7 @@ __global__ void carry_over_elite(float* gpu_J, float* gpu_J_elite, float* gpu_co
 			t_best_score = gpu_J[t_elite];
 			float score;
 			int remainder = 0;
-			if (idx==NELITE-1){
+			if (idx==n_elite-1){
 				remainder = npopulation_mod_n_elite;
 			}
 
@@ -370,7 +370,7 @@ __global__ void carry_over_elite(float* gpu_J, float* gpu_J_elite, float* gpu_co
 
 void carry_over_elite_launcher(float* J, float* J_elite, float* constraints, float* constraints_prev, float* gpu_result, int n_elite, int npopulation_mod_n_elite, int npopulation_div_n_elite,  int nlmis, int ndimensions, int nconstraints, cudaStream_t* stream)
 {
-	carry_over_elite<<<NELITE,NLMI*NDIM,0,stream[0]>>>(J, J_elite, constraints, constraints_prev, gpu_result, n_elite, npopulation_mod_n_elite, npopulation_div_n_elite, nlmis, ndimensions, nconstraints);
+	carry_over_elite<<<n_elite,nlmis*ndimensions,0,stream[0]>>>(J, J_elite, constraints, constraints_prev, gpu_result, n_elite, npopulation_mod_n_elite, npopulation_div_n_elite, nlmis, ndimensions, nconstraints);
 }
 
 
@@ -393,7 +393,7 @@ __global__ void gpu_mmul_ABT(const float *A, const float *B, float *C, const int
 	}
 }
 
-void gpu_mmul_ABT_launcher(const float *A, const float *B, float *C, const int m, const int k, const int n, cudaStream_t* stream) {
+void gpu_mmul_ABT_launcher(const float *A, const float *B, float *C, const int m, const int k, const int n, int TPB, cudaStream_t* stream) {
 	gpu_mmul_ABT<<<(m*n+TPB-1)/TPB,TPB,0,stream[1]>>>(A, B, C, m, k, n);
 }
 

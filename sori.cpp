@@ -91,7 +91,18 @@ int main(int argc, char* argv[]) {
   const int NSTREAMS = 3;
   
   //sizes
-  //const int NPTS = 200;
+  const int NPTS = 900;
+  const int NLMI = 3;
+  const int NPOP = 400;
+  const int NCON = NLMI * NPOP;
+  const int NDIM = 2;
+  const int TPB = 32;
+  const int TPB_DPRF = 640;
+  const int NGEN = 25;
+  const int NTOURN = 4;
+  const int NELITE = 10;
+  int best = -1;
+  
   cudaStream_t* streams;
   streams = new cudaStream_t[NSTREAMS];
   for(int i=0;i<NSTREAMS; i++)
@@ -262,7 +273,7 @@ int main(int argc, char* argv[]) {
 	cudaMemcpy(gpu_calculate_contributions_scan,&calculate_contributions_scan,sizeof(int),cudaMemcpyHostToDevice);
 
 	 // setup SORI variables
-	init_launcher(1);
+	init_launcher(1, NPTS, NCON, TPB);
 	FILE *fp;
 	fp = fopen("sori_test.out","w");
 
@@ -358,39 +369,39 @@ int main(int argc, char* argv[]) {
 		cudaMemcpy(gpu_current_operating_point,current_operating_point, NFEATURES * sizeof(float),cudaMemcpyHostToDevice);
 
 
-		generate_test_points_launcher(gpu_feature_points_out, gpu_points, NPTS, NFEATURES, NDIM, gpu_scale, gpu_current_operating_point, gpu_important_features, streams);
+		generate_test_points_launcher(gpu_feature_points_out, gpu_points, NPTS, NFEATURES, NDIM, gpu_scale, gpu_current_operating_point, gpu_important_features, TPB, streams);
 
 		
-	  random_points_launcher(gpu_constraints, NDIM, NCON, 0.5, 0.25,-1,streams);
+	  random_points_launcher(gpu_constraints, NDIM, NCON, 0.5, 0.25,best,TPB, streams);
 
 	  eval_forest_launcher(n_trees, gpu_n_scan_points, gpu_n_trees, gpu_feature_points_out, gpu_feature, gpu_children_left, gpu_children_right, gpu_tree_start, gpu_threshold, gpu_value, gpu_n_classes, gpu_tree_result_scan, gpu_feature_contributions_scan, gpu_feature_contributions_forest_scan, gpu_disruptivity,gpu_calculate_contributions_scan);
 
 	  // genetic algorithm loop
 	  for (int i = 0; i < NGEN; i++) {
-	  	evaluate_constraint_sos_launcher(gpu_constraints, gpu_constraint_sos,streams);
-	  	gpu_mmul_ABT_launcher(gpu_constraints, gpu_points, gpu_dot_products, NCON, NDIM, NPTS,streams);
+	  	evaluate_constraint_sos_launcher(gpu_constraints, gpu_constraint_sos, NDIM, NCON, TPB, streams);
+	  	gpu_mmul_ABT_launcher(gpu_constraints, gpu_points, gpu_dot_products, NCON, NDIM, NPTS,TPB,streams);
 
 	  	//Copy constraints to prev_gen
-	  	GpuCopy_launcher(gpu_constraints_prev, gpu_constraints, NCON, NDIM, streams);
+	  	GpuCopy_launcher(gpu_constraints_prev, gpu_constraints, NCON, NDIM, TPB, streams);
 	  	// Determine which constraints are satisfied by each point (dot_products < sos)
-	  	evaluate_constraints_satisfied_launcher(gpu_dot_products, gpu_constraint_sos, gpu_pt_satisfies_constraint, NCON, NPTS);
+	  	evaluate_constraints_satisfied_launcher(gpu_dot_products, gpu_constraint_sos, gpu_pt_satisfies_constraint, NCON, NPTS,TPB);
 	  
 	  	// Determine which points satisfy all constraints (eventually there will be sets of constraints representing individuals in genetic alg.)
 	
 	  	float weights = 20.0f;
-	  	evaluate_all_constraints_satisfied_launcher(gpu_pt_satisfies_constraint, gpu_pt_satisfies_all_constraints, gpu_n_safe_inside, gpu_n_unsafe_inside, gpu_disruptivity, 0.5, weights, gpu_J,NPTS, NPOP, NLMI, NCON);
+	  	evaluate_all_constraints_satisfied_launcher(gpu_pt_satisfies_constraint, gpu_pt_satisfies_all_constraints, gpu_n_safe_inside, gpu_n_unsafe_inside, gpu_disruptivity, 0.5, weights, gpu_J,NPTS, NPOP, NLMI, NCON, TPB);
 
 	  	//calculate nsafe inside and nunsafe inside
-	  	genetic_select_launcher(gpu_J, gpu_tournament, gpu_winners, gpu_constraints, gpu_constraints_prev, NPOP, NTOURN, NCON, NLMI, NDIM, streams);
+	  	genetic_select_launcher(gpu_J, gpu_tournament, gpu_winners, gpu_constraints, gpu_constraints_prev, NPOP, NTOURN, NCON, NLMI, NDIM, TPB, streams);
 
 	  	//Based on probability, mate two individuals (two in, two out, modify in place).
 	  	float crossover_prob = 0.5f;
-	  	genetic_mate_launcher(gpu_constraints, crossover_prob, NPOP, NLMI, NDIM, NCON,streams);//TODO: could split over more threads
+	  	genetic_mate_launcher(gpu_constraints, crossover_prob, NPOP, NLMI, NDIM, NCON,TPB,NPOP,streams);//TODO: could split over more threads
 
 	  	//Based on probability, mutate individual traits
 	  	float mutate_prob = 0.5f;
 	  	float mutate_stdev = 0.3f;
-	  	genetic_mutate_launcher(gpu_constraints, mutate_prob, mutate_stdev,NCON*NDIM, streams);
+	  	genetic_mutate_launcher(gpu_constraints, mutate_prob, mutate_stdev,NCON*NDIM, TPB,streams);
 
 	  	//Carry over elite individual(s) from previous generation
 

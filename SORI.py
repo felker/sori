@@ -10,7 +10,7 @@ import sys
 
 import h5py
 results_dir = 'wmhd_ip_180808_v2'#'wmhd_ne_183245'
-shot_data_file = '180808_data.h5'#'183245_data.h5'
+shot_data_file = '180808_new.h5'#'183245_data.h5'
 forest_file = 'forest_245_15_dan.h5'
 
 TPB = 32
@@ -63,7 +63,7 @@ genetic_select_kernel = mod.get_function("genetic_select")
 genetic_mate_kernel = mod.get_function("genetic_mate")
 genetic_mutate_kernel = mod.get_function("genetic_mutate")
 carry_over_elite_kernel = mod.get_function("carry_over_elite")
-evaluate_disruptivity_kernel = mod.get_function("evaluate_disruptivity")
+# evaluate_disruptivity_kernel = mod.get_function("evaluate_disruptivity")
 eval_forest_kernel = mod_dprf.get_function("eval_forest")
 
 # create GPU arrays
@@ -83,7 +83,7 @@ d_J_elite = gpuarray.zeros(NELITE, np.float32)
 d_result = gpuarray.zeros(NLMI*NDIM, np.float32)
 
 #initialize
-init_kernel(np.uint32(1), block = (TPB,1,1), grid = ((NPTS*NCON+TPB-1)//TPB,1,1), stream = strm1)
+init_kernel(np.uint32(1), np.int32(NPTS), np.int32(NCON), block = (TPB,1,1), grid = ((NPTS*NCON+TPB-1)//TPB,1,1), stream = strm1)
 
 #scale range for input features
 scale = np.array([
@@ -109,7 +109,6 @@ for i in important_feature_indices:
 d_important_features = gpuarray.zeros(NFEATURES, np.uint32)
 d_important_features.set_async(important_features)
 weights = 40.0
-
 
 #DPRF inputs
 with h5py.File(shot_data_file, 'r') as hf:
@@ -190,6 +189,8 @@ constraints_array = np.zeros((len(evaluation_indices),NLMI,NDIM))
 points_array = np.zeros((len(evaluation_indices),NPTS,NDIM))
 disruptivity_array = np.zeros((len(evaluation_indices),NPTS))
 best = -1
+
+#TODO: Update kernel inputs since some were modified
 for i_data_index, data_index in enumerate(evaluation_indices):
 	d_best.set_async(np.int32(best))
 	print(data_index)
@@ -378,7 +379,7 @@ for i_data_index, data_index in enumerate(evaluation_indices):
 		)
 		ax.set_title(title)
 		#plt.show()
-		#plt.savefig(f'./{results_dir}/{results_dir}_SORI_result_{data_index}.png')
+		plt.savefig(f'./{results_dir}/{results_dir}_SORI_result_{data_index}.png')
 
 	feature_points = d_feature_points.get_async(stream=strm1)
 	#print(f'Feature points shape: {feature_points.shape}')
@@ -387,8 +388,9 @@ for i_data_index, data_index in enumerate(evaluation_indices):
 print(proximity_array)
 fig,ax = plt.subplots()
 plt.plot(shot_time[evaluation_indices],proximity_array)
+#plt.show()
 #plt.plot(np.diff(shot_time))
-#plt.savefig(f'./{results_dir}/{results_dir}_SORI_proximity.png')
+plt.savefig(f'./{results_dir}/{results_dir}_SORI_proximity.png')
 #Archive data
 archive_filename = f"./{results_dir}/{results_dir}_archive.h5"
 
