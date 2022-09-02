@@ -17,6 +17,10 @@
 
 #include <cuda_runtime.h>
 
+#include <iostream>
+#include <fstream>
+using namespace std;
+
 SoriCfg soriCfg;
 Sori sori;
 
@@ -114,6 +118,9 @@ rtgpu_Sori::rtgpu_Sori(SoriIoCfg const & cfg) {
 void rtgpu_Sori::run(SoriIoIn in, SoriIoOut & out) {
 	Logger log("sorirun");
 	bool const dbg = (cycle > 10 && cycle < 14);
+    ofstream disruptivity_file;
+    disruptivity_file.open ("./disruptivity.txt");
+    
 
 	api(cudaMemcpy, soriCfg.operatingPoint, in.features, soriCfg.dprf.nFeatures * sizeof(float), cudaMemcpyHostToDevice); // this cycle's input
 	sori.gpuGenerateTestPoints(soriCfg.dprf.xEval, soriCfg.scales, soriCfg.operatingPoint, soriCfg.important, streams.data());
@@ -138,14 +145,29 @@ void rtgpu_Sori::run(SoriIoIn in, SoriIoOut & out) {
 			soriCfg.dprf.featureContributionsForest,
 			soriCfg.disruptivity,
 			soriCfg.dprf.calculateContributions);
-	api(cudaDeviceSynchronize);
-
+	//api(cudaDeviceSynchronize);
 	// FIXME: What is 'best'? best needs to be stored and kept between each call to this function. Store here or in PCS?
-	sori.gpuRandomPoints(soriCfg.constraints, soriCfg.nDimensions, soriCfg.nConstraints, 0.5f, 0.25f, -1 /*best*/, streams.data());
+	sori.gpuRandomPoints(soriCfg.constraints, soriCfg.nDimensions, soriCfg.nConstraints, 1.0f, 0.5f, -1 /*best*/, streams.data());
 	api(cudaDeviceSynchronize);
 
 	float constraints[soriCfg.nConstraints * soriCfg.nDimensions];
+	float disruptivity[soriCfg.nPoints];
+	float xeval[soriCfg.nPoints * soriCfg.dprf.nFeatures] ;
+	float cpupoints[soriCfg.nPoints * 2];
+	cudaMemcpy(disruptivity,soriCfg.disruptivity,sizeof(float) * soriCfg.nPoints, cudaMemcpyDeviceToHost);
+	cudaMemcpy(xeval,soriCfg.dprf.xEval,sizeof(float) * soriCfg.nPoints*soriCfg.dprf.nFeatures, cudaMemcpyDeviceToHost);
+	cudaMemcpy(cpupoints,soriCfg.points,sizeof(float) * soriCfg.nPoints*2, cudaMemcpyDeviceToHost);
+	for (int i = 0; i < soriCfg.nPoints; ++i) {
+	    disruptivity_file << xeval[i*soriCfg.dprf.nFeatures] << ' ' << xeval[i*soriCfg.dprf.nFeatures+1] << ' ' << cpupoints[i*2] << ' ' << cpupoints[i*2+1] << ' ' << disruptivity[i] << '\n';
+	    }
+	    
+	//cudaMemcpy(constraints, soriCfg.constraints, sizeof(float) * soriCfg.nConstraints * soriCfg.nDimensions, cudaMemcpyDeviceToHost);
+	//api(cudaDeviceSynchronize);
+	//for (int i = 0; i < 20; ++i){
+	//    log(Logger::Level::INFO) << "1 constraints: " << constraints[i] << '\n';
+	//}
 	for (int i = 0; i < soriCfg.nGenerations; ++i) {
+	    //log << i << '\n';
 		//if (dbg) {
 			//log(Logger::Level::INFO) << "Start of generation: " << i << '\n';
 			//cudaMemcpy(constraints, soriCfg.constraints, sizeof(float) * soriCfg.nConstraints * soriCfg.nDimensions, cudaMemcpyDeviceToHost);
@@ -155,38 +177,68 @@ void rtgpu_Sori::run(SoriIoIn in, SoriIoOut & out) {
 		//}
 
 		sori.gpuEvaluateConstraintSos(streams.data());
-		api(cudaDeviceSynchronize);
+		//api(cudaDeviceSynchronize);
 
 		sori.gpuMmulConPts(soriCfg.constraints, soriCfg.points, soriCfg.dotProducts, streams.data());
-		api(cudaDeviceSynchronize);
+		//api(cudaDeviceSynchronize);
 
 		sori.gpuCopy(soriCfg.constraintsPrev, soriCfg.constraints, soriCfg.nConstraints, soriCfg.nDimensions, streams.data());
 		api(cudaDeviceSynchronize);
 		
 		sori.gpuEvaluateConstraintsSatisfied();
-		api(cudaDeviceSynchronize);
+		//api(cudaDeviceSynchronize);
 
 	  	float const weights = 40.0f;
-	  	sori.gpuEvaluateAllConstraintsSatisfied(0.4f, weights);
+	  	sori.gpuEvaluateAllConstraintsSatisfied(0.2f, weights);
 		api(cudaDeviceSynchronize);
  
+        //cudaMemcpy(constraints, soriCfg.constraints, sizeof(float) * soriCfg.nConstraints * soriCfg.nDimensions, cudaMemcpyDeviceToHost);
+	    //api(cudaDeviceSynchronize);
+		//for (int i = 0; i < 20; ++i){
+		//    log(Logger::Level::INFO) << "satisfies constraints: " << constraints[i] << '\n';
+		//}
 	  	sori.gpuGeneticSelect(streams.data());
-		api(cudaDeviceSynchronize);
+		
+		//api(cudaDeviceSynchronize);
+        //cudaMemcpy(constraints, soriCfg.constraints, sizeof(float) * soriCfg.nConstraints * soriCfg.nDimensions, cudaMemcpyDeviceToHost);
+	    //api(cudaDeviceSynchronize);
+		//for (int i = 0; i < 20; ++i){
+		//    log(Logger::Level::INFO) << "select constraints: " << constraints[i] << '\n';
+		//}
+		//api(cudaDeviceSynchronize);
 
 	  	//Based on probability, mate two individuals (two in, two out, modify in place).
-	  	float const crossoverProb = 0.5f;
+	  	float const crossoverProb = 0.15f;
 	  	sori.gpuGeneticMate(crossoverProb, streams.data());
-		api(cudaDeviceSynchronize);
-
+		
+		//api(cudaDeviceSynchronize);
+        //cudaMemcpy(constraints, soriCfg.constraints, sizeof(float) * soriCfg.nConstraints * soriCfg.nDimensions, cudaMemcpyDeviceToHost);
+	    //api(cudaDeviceSynchronize);
+		//for (int i = 0; i < 20; ++i){
+		//    log(Logger::Level::INFO) << "mate constraints: " << constraints[i] << '\n';
+		//}
+		//api(cudaDeviceSynchronize);
+		
 	  	//Based on probability, mutate individual traits
-	  	float const mutateProb = 0.5f;
-	  	float const mutateStdev = 0.3f;
+	  	float const mutateProb = 0.3f;
+	  	float const mutateStdev = 0.1f;
 	  	sori.gpuGeneticMutate(mutateProb, mutateStdev, streams.data());
-		api(cudaDeviceSynchronize);
-
+		
+		//api(cudaDeviceSynchronize);
+        //cudaMemcpy(constraints, soriCfg.constraints, sizeof(float) * soriCfg.nConstraints * soriCfg.nDimensions, cudaMemcpyDeviceToHost);
+	    api(cudaDeviceSynchronize);
+		//for (int i = 0; i < 20; ++i){
+		//    log(Logger::Level::INFO) << "mutate constraints: " << constraints[i] << '\n';
+		//}
+		
 	  	//Carry over elite individual(s) from previous generation
 	  	sori.gpuCarryOverElite(soriCfg.result, streams.data());
-		api(cudaDeviceSynchronize);
+        //cudaMemcpy(constraints, soriCfg.constraints, sizeof(float) * soriCfg.nConstraints * soriCfg.nDimensions, cudaMemcpyDeviceToHost);
+	    //api(cudaDeviceSynchronize);
+		//for (int i = 0; i < 20; ++i){
+		//    log(Logger::Level::INFO) << "carry constraints: " << constraints[i] << '\n';
+		//}
+
 	}
 
 	float jElite[soriCfg.nElite];
@@ -210,8 +262,9 @@ void rtgpu_Sori::run(SoriIoIn in, SoriIoOut & out) {
 		out.best[i] = constraints[best+i];
 		// if (dbg) log(Logger::Level::INFO) << "best constraints: " << out.best[i] << '\n';
 	}
-
+     
 	++cycle;
+	disruptivity_file.close();
 }
 
 rtgpu_Sori::~rtgpu_Sori() {

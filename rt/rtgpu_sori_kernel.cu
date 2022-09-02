@@ -233,28 +233,17 @@ void Sori::gpuCopy(float* des, float* __restrict__ src, int const M, int const N
 __global__ void genetic_select(float* gpu_J, int* tournament_members, int* winners, float* gpu_constraints, float* gpu_constraints_prev, int npopulation, int ntournament, int nconstraints, int nlmis, int ndimensions)
 {
 	int idx=blockIdx.x*blockDim.x+threadIdx.x;
-        //float l_gpu_J[NTOURN];
-	//int individuals[NTOURN];
-	if (idx<npopulation*ntournament){
-		tournament_members[idx] = curand(&sori_states[idx])%npopulation;
-	}
 	if (idx<npopulation) {
-		//sori_randomInts(states[idx], individuals, NTOURN, NPOP);
-		//for(int i = 0; i < n_individuals; ++i){
-		//	printf("Thread %d individual %d: %d\n",blockIdx.x,i,individuals[i]);
-   	//}
-                //for(int i = 0; i < NTOURN; ++i){
-                //    l_gpu_J[i] = gpu_J[i];
-                //}
+	    for (int i=0; i < ntournament; ++i){
+	        tournament_members[idx*ntournament+i] = curand(&sori_states[idx])%npopulation;
+	        }
 		winners[idx] = sori_geneticTournament(gpu_J, &tournament_members[idx*ntournament], ntournament);
-
 		for(int i = 0; i < nlmis; ++i){
 			for(int j = 0; j < ndimensions; ++j){
 				gpu_constraints[idx*(nlmis*ndimensions) + j + ndimensions*i] = gpu_constraints_prev[winners[idx]*(nlmis*ndimensions) + j + ndimensions*i];
 			}
 		}
 	}
-	//printf("Thread %d Winner: %d\n",blockIdx.x, winners[blockIdx.x]);
 }
 
 void Sori::gpuGeneticSelect(cudaStream_t* stream)
@@ -300,9 +289,9 @@ __global__ void genetic_mutate(float* gpu_constraints, float mutate_prob, float 
 	if (idx<(ncon_m_ndim)){
 		float mutate;
 		mutate = curand_uniform(&sori_states[idx]);
+		float mutation;
+		mutation = curand_normal(&sori_states[idx]) * mutate_stdev;
 		if (mutate < mutate_prob) {
-			float mutation;
-			mutation = curand_normal(&sori_states[idx]) * mutate_stdev;
 			gpu_constraints[idx] = max(min(gpu_constraints[idx] + mutation,1.0),-1.0);
 		}
 	}
