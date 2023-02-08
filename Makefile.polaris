@@ -1,0 +1,36 @@
+NVCC=nvcc
+#INC=-I${NVIDIA_PATH}/cuda/include -I/usr/include/ -I/opt/cray/pe/hdf5/1.12.1.3/include -I/opt/cray/pe/hdf5/1.12.1.3/nvidia/20.7/include
+#INC=-I${NVIDIA_PATH}/cuda/include -I/usr/include/ -I/opt/cray/pe/hdf5/1.12.1.3/nvidia/20.7/include
+INC=-I${NVIDIA_PATH}/cuda/include -I/usr/include/ -I/opt/cray/pe/hdf5/1.12.1.3/gnu/9.1/include
+NVCC_FLAGS_M=-g -G -Xcompiler -Wall -L${NVIDIA_PATH}/cuda/lib64 -L/opt/cray/pe/hdf5/1.12.1.3/gnu/9.1/lib -lrt -lcurand -lhdf5
+NVCC_FLAGS=-g -G -Xcompiler -Wall -L${NVIDIA_PATH}/cuda/lib64 -L/opt/cray/pe/hdf5/1.12.1.3/gnu/9.1/lib -gencode arch=compute_80,code=sm_80 -lrt -lcurand -lhdf5
+
+all: sori.exe
+
+sori.exe: sori.o sori_kernel.o dprf.o dprf_kernel.o
+	$(NVCC) $(INC) $(NVCC_FLAGS_M) $^ -o $@
+
+sori.o: sori.cpp sori_kernel.h
+	$(NVCC) $(INC) $(NVCC_FLAGS_M) -c $< -o $@
+
+sori_kernel.o: sori_kernel.cu sori_kernel.h
+	$(NVCC) $(INC) $(NVCC_FLAGS_M) -c $< -o $@
+
+dprf_test.exe: dprf_test.o dprf.o dprf_kernel.o
+	$(NVCC) $(INC) $(NVCC_FLAGS_M) $^ -o $@
+
+dprf_test.o: dprf_test.c dprf.h dprf_kernel.o
+	$(NVCC) $(INC) $(NVCC_FLAGS_M) -c $< -o $@
+
+dprf.o: dprf.c dprf.h dprf_kernel.h
+	$(NVCC) $(INC) $(NVCC_FLAGS_M) -c $< -o $@
+
+dprf_kernel.o: dprf_kernel.cu dprf_kernel.h
+	$(NVCC) $(INC) $(NVCC_FLAGS_M) -c $< -o $@
+
+cubin: sori_kernel.cu dprf_kernel.cu
+	$(NVCC) $(NVCC_FLAGS) -cubin sori_kernel.cu -o sori_kernel.cubin
+	$(NVCC) $(NVCC_FLAGS) -cubin dprf_kernel.cu -o dprf_kernel.cubin
+
+clean:
+	rm -rf *.o *.exe *.cubin __pycache__	
