@@ -10,11 +10,12 @@ import sys
 
 import h5py
 results_dir = 'wmhd_ip_180808_v2'#'wmhd_ne_183245'
-shot_data_file = '180808_new.h5'#'183245_data.h5'
+shot_data_file = '180808.h5'#'183245_data.h5'
+# results_dir = 'wmhd_ip_186121_v2'
+# shot_data_file = '186121.h5'
 forest_file = 'forest_245_15_dan.h5'
 
-#TPB = 32
-TPB = 16
+TPB = 32
 NDIM = 2
 NGEN = 25#150
 if len(sys.argv)-1 > 0:
@@ -34,7 +35,7 @@ if len(sys.argv)-1 > 0:
                 f.attrs['NLMI'] = NLMI
                 f.attrs['NPOP'] = NPOP
 else:
-        NPTS = 300 # 900#300 #2000,4,400 used in original plots
+        NPTS = 900#300 #2000,4,400 used in original plots
         NLMI = 3
         NPOP = 400#40
 NCON = NLMI * NPOP
@@ -182,7 +183,11 @@ evaluation_indices = np.arange(10000, len(shot_data), 10)
 #evaluation_indices = np.arange(5,len(shot_data),1)
 j_plot_points = 0
 j_plot_result = 0
-generate_plot_indices = np.array([18000,19040,19700])
+#generate_plot_indices = np.array([18000,19040,19700])
+
+# 180808: 5.00s 5.15s 5.16s
+generate_plot_indices = np.array([19600,20200,20240])
+#generate_plot_indices = np.array([18000,19040,19700])
 #generate_plot_indices = np.array([50,100,220])
 
 proximity_array = np.zeros((len(evaluation_indices),))
@@ -245,7 +250,7 @@ for i_data_index, data_index in enumerate(evaluation_indices):
                 ax.set_title(title)
                 #plt.savefig(f'./{results_dir}/{results_dir}_dprf_points_{data_index}.png')
         #quit()
-        print(f"((NCON+TPB-1)//TPB,1,1) = {((NCON+TPB-1)//TPB,1,1)}")
+        #print(f"((NCON+TPB-1)//TPB,1,1) = {((NCON+TPB-1)//TPB,1,1)}")
         random_points_kernel(d_constraints, np.int32(NDIM), np.int32(NCON), np.float32(1.0), np.float32(0.5*1.0), d_best, block = (TPB,1,1), grid = ((NCON+TPB-1)//TPB,1,1), stream = strm1)
         constraints = d_constraints.get_async(stream=strm1).reshape(NCON,NDIM)
         #print(constraints)
