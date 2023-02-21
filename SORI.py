@@ -9,10 +9,11 @@ from matplotlib import cm
 import sys
 
 import h5py
-results_dir = 'wmhd_ip_180808_v2'#'wmhd_ne_183245'
-shot_data_file = '180808.h5'#'183245_data.h5'
-# results_dir = 'wmhd_ip_186121_v2'
-# shot_data_file = '186121.h5'
+shot_num=186121
+# results_dir = 'wmhd_ip_180808_v2'#'wmhd_ne_183245'
+# shot_data_file = '180808.h5'#'183245_data.h5'
+results_dir = f'wmhd_ip_{shot_num}_v2'
+shot_data_file = f'{shot_num}.h5'
 forest_file = 'forest_245_15_dan.h5'
 
 TPB = 32
@@ -186,7 +187,9 @@ j_plot_result = 0
 #generate_plot_indices = np.array([18000,19040,19700])
 
 # 180808: 5.00s 5.15s 5.16s
-generate_plot_indices = np.array([19600,20200,20240])
+#generate_plot_indices = np.array([19600,20200,20240])
+
+generate_plot_indices = np.array([7000, 9000, 11000, 13000,15000,17000, 19000])
 #generate_plot_indices = np.array([18000,19040,19700])
 #generate_plot_indices = np.array([50,100,220])
 
@@ -243,7 +246,7 @@ for i_data_index, data_index in enumerate(evaluation_indices):
                         ax.set_ylabel(f'$\Delta$ {feature_names_used[1]}')
                 ax.set_aspect('equal')
                 title = (
-                        f"DIII-D Shot = 180808, Time = {shot_time[data_index]:.3f}s\n"
+                        f"DIII-D Shot = {shot_num}, Time = {shot_time[data_index]:.3f}s\n"
                         f"{feature_names_used[0]}={current_operating_point[important_feature_indices[0]]*plot_scales[important_feature_indices[0]]:.3f} {feature_plot_units[important_feature_indices[0]]}, "
                         f"{feature_names_used[1]}={current_operating_point[important_feature_indices[1]]*plot_scales[important_feature_indices[1]]:.3f} {feature_plot_units[important_feature_indices[1]]}"
                 )
@@ -329,6 +332,7 @@ for i_data_index, data_index in enumerate(evaluation_indices):
         A = constraints_new[best*(NPOP//NELITE)*NLMI:best*(NPOP//NELITE)*NLMI+NLMI,:]
 
         proximities = np.zeros((NLMI,))
+        print('A=')
         print(A)
         for jlmi in np.arange(NLMI):
                 proximities[jlmi] = np.sqrt((A[jlmi,0]*feature_scales_used[0]/(plot_scales[important_feature_indices[0]]*scale[1,important_feature_indices[0]]))**2 + (A[jlmi,1]*feature_scales_used[1]/(plot_scales[important_feature_indices[1]]*scale[1,important_feature_indices[1]]))**2)
@@ -359,10 +363,25 @@ for i_data_index, data_index in enumerate(evaluation_indices):
                 ax.scatter(A[:,0],A[:,1])
 
                 for i in np.arange(NLMI):
+                        # each of the 3x calls are passsing 2x points in (x_0, x_1), (y_0, y_1) format
                         color2use = color_cycle[i]
-                        ax.plot([0, A[i,0]],[0,A[i,1]],linewidth=3,color=color2use)
-                        ax.plot([A[i,0], A[i,0]-100*A[i,1]],[A[i,1],A[i,1]+100*A[i,0]],color=color2use,linewidth=3)
-                        ax.plot([A[i,0], A[i,0]+100*A[i,1]],[A[i,1],A[i,1]-100*A[i,0]],color=color2use,linewidth=3)
+                        print(f'here; color={color2use}')
+                        # dashed line from the origin to the constraint line, orthogonal to the constraint
+                        ax.plot([0, A[i,0]],[0,A[i,1]],
+                                linewidth=2.5,color=color2use,
+                                linestyle='dashed', alpha=0.8)
+                        # half of constraint line, left
+                        print([A[i,0], A[i,0]-100*A[i,1]])
+                        print([A[i,1],A[i,1]+100*A[i,0]])
+                        ax.plot([A[i,0], A[i,0]-100*A[i,1]],[A[i,1],A[i,1]+100*A[i,0]],
+                                linewidth=3.0,color=color2use,
+                                linestyle='solid', alpha=1.0)
+                        # other half of constraint line, right
+                        print([A[i,0], A[i,0]+100*A[i,1]])
+                        print([A[i,1],A[i,1]-100*A[i,0]])
+                        ax.plot([A[i,0], A[i,0]+100*A[i,1]],[A[i,1],A[i,1]-100*A[i,0]],
+                                linewidth=3.0,color=color2use,
+                                linestyle='solid', alpha=1.0)
                 ax.set_xlim([-1.0,1.0])
                 ax.set_ylim([-1.0,1.0])
                 ticks_x = plt.xticks()[0]
@@ -380,13 +399,13 @@ for i_data_index, data_index in enumerate(evaluation_indices):
                         ax.set_ylabel(f'$\Delta$ {feature_names_used[1]}')
                 ax.set_aspect('equal')
                 title = (
-                        f"DIII-D Shot = 180808, Time = {shot_time[data_index]:.3f}s\n"
+                        f"DIII-D Shot = {shot_num}, Time = {shot_time[data_index]:.3f}s\n"
                         f"{feature_names_used[0]}={current_operating_point[important_feature_indices[0]]*plot_scales[important_feature_indices[0]]:.3f} {feature_plot_units[important_feature_indices[0]]}, "
                         f"{feature_names_used[1]}={current_operating_point[important_feature_indices[1]]*plot_scales[important_feature_indices[1]]:.3f} {feature_plot_units[important_feature_indices[1]]}"
                 )
                 ax.set_title(title)
                 #plt.show()
-                plt.savefig(f'./{results_dir}/{results_dir}_SORI_result_{data_index}.png')
+                plt.savefig(f'./{results_dir}/{results_dir}_SORI_result_{data_index}.pdf')
 
         feature_points = d_feature_points.get_async(stream=strm1)
         #print(f'Feature points shape: {feature_points.shape}')
@@ -397,7 +416,7 @@ fig,ax = plt.subplots()
 plt.plot(shot_time[evaluation_indices],proximity_array)
 #plt.show()
 #plt.plot(np.diff(shot_time))
-plt.savefig(f'./{results_dir}/{results_dir}_SORI_proximity.png')
+plt.savefig(f'./{results_dir}/{results_dir}_SORI_proximity.pdf')
 #Archive data
 archive_filename = f"./{results_dir}/{results_dir}_archive.h5"
 
