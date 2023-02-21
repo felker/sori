@@ -2,13 +2,12 @@ import numpy as np
 import h5py
 
 shot_num=186121
-shot_data_time = np.genfromtxt('{shot_num}.csv', delimiter=',')
+shot_data_time = np.genfromtxt(f'{shot_num}.csv', delimiter=',')
 shot_data=shot_data_time[:,0:8]
 times=shot_data_time[:,8]
 
-print(len(times))
 n_features=8
-n_times=21600
+n_times=len(times)
 
 hf = h5py.File(f'{shot_num}.h5', 'w')
 
