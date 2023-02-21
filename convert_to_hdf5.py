@@ -1,7 +1,9 @@
 import numpy as np
 import h5py
 
-shot_num=186121
+shot_num='182121-v2'
+
+# ['$I_p$', '$W_{MHD}$', '${n}_e$', '$a$', 'Triang.', 'Square.', '$\kappa$', '$\ell_i$', time]
 shot_data_time = np.genfromtxt(f'{shot_num}.csv', delimiter=',')
 shot_data=shot_data_time[:,0:8]
 times=shot_data_time[:,8]
