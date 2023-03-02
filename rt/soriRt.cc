@@ -93,7 +93,7 @@ int main() {
     //Find the row in out.best with the smallest normalized distance to disruption
     float norm_dist_arr[MLGPU_SORI_NLMI];
     int min_norm_dist_index = 0;
-    float min_norm_dist = 1e6f;
+    float min_norm_dist = 1.0e6f;
     for (int i=0; i < nlmi; ++i){
         norm_dist_arr[i] = sqrt(pow(out.best[i*2]*proximity_normalization[0],2) + pow(out.best[i*2+1]*proximity_normalization[1],2));
         if (norm_dist_arr[i] < min_norm_dist){
@@ -125,3 +125,41 @@ int main() {
     //log << "prox norm: " << proximity_normalization[0] << ' ' << proximity_normalization[1] << '\n';
     return 0;
 }
+
+
+// 2023-03-01 09:32:53.224334: [INFO ][soriRt]: Loading first cycle from shot file:
+// important: 1
+// important: 1
+// important: 0
+// important: 0
+// important: 0
+// important: 0
+// important: 0
+// important: 0
+// features[0]:1.10563e+06
+// features[1]:187400
+// features[2]:1.93632e+19
+// features[3]:0.600951
+// features[4]:0.43912
+// features[5]:0.326558
+// features[6]:1.77533
+// features[7]:0.868978
+
+// 2023-03-01 09:32:54.828989: [INFO ][soriRt]: Output:
+// best[0]: 0.583908
+// best[1]: 0.638073
+
+// best[2]: 0.782184
+// best[3]: 0.549052
+
+// best[4]: 0.722252
+// best[5]: -0.694342
+
+// opt_dir_scaled[0]: -30319.5
+// opt_dir_scaled[1]: -39758.4
+// opt_dir_scaled[2]: 0
+// opt_dir_scaled[3]: 0
+// opt_dir_scaled[4]: 0
+// opt_dir_scaled[5]: 0
+// opt_dir_scaled[6]: 0
+// opt_dir_scaled[7]: 0
