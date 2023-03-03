@@ -1,4 +1,4 @@
-from pycuda import driver, compiler, gpuarray, tools, curandom
+from pycuda import driver, compiler, gpuarray, tools # , curandom
 import pycuda.autoinit, time
 import numpy as np
 
@@ -10,38 +10,49 @@ import sys
 
 import h5py
 shot_num=186121
-# results_dir = 'wmhd_ip_180808_v2'#'wmhd_ne_183245'
-# shot_data_file = '180808.h5'#'183245_data.h5'
-results_dir = f'wmhd_ip_{shot_num}_v2'
-shot_data_file = f'{shot_num}.h5'
+results_dir = f'wmhd_ip_{shot_num}'  #'wmhd_ne_183245'
+shot_data_file = f'{shot_num}.h5'  #'183245_data.h5'
 forest_file = 'forest_245_15_dan.h5'
 
+# CUDA threads per block:
 TPB = 32
 NDIM = 2
-NGEN = 25#150
+
 if len(sys.argv)-1 > 0:
-        #set up grid and select instance based on argument
-        NPTS_array = [100,300,500,700,900]
-        NPOP_array = [50, 150, 250, 350, 400]
-        NLMI_array = [3, 5, 7]
-        NPTSv, NPOPv, NLMIv = np.meshgrid(NPTS_array, NPOP_array, NLMI_array)
-        index = int(sys.argv[1])
-        NPTS = int(NPTSv.flatten()[index])
-        NLMI = int(NLMIv.flatten()[index])
-        NPOP = int(NPOPv.flatten()[index])
-        print(f"Index={index}, NPTS={NPTS}, NLMI={NLMI}, NPOP={NPOP}")
-        print(f"Total jobs = {len(NPTSv.flatten())}")
-        with h5py.File(f'./nvprof_logs/SORI_settings_{index}.h5',"w") as f:
-                f.attrs['NPTS'] = NPTS
-                f.attrs['NLMI'] = NLMI
-                f.attrs['NPOP'] = NPOP
+    #set up grid and select instance based on argument
+    NPTS_array = [100,300,500,700,900]
+    NPOP_array = [50, 150, 250, 350, 400]
+    NLMI_array = [3, 5, 7]
+    NPTSv, NPOPv, NLMIv = np.meshgrid(NPTS_array, NPOP_array, NLMI_array)
+    index = int(sys.argv[1])
+    NPTS = int(NPTSv.flatten()[index])
+    NLMI = int(NLMIv.flatten()[index])
+    NPOP = int(NPOPv.flatten()[index])
+    print(f"Index={index}, NPTS={NPTS}, NLMI={NLMI}, NPOP={NPOP}")
+    print(f"Total jobs = {len(NPTSv.flatten())}")
+    with h5py.File(f'./nvprof_logs/SORI_settings_{index}.h5',"w") as f:
+            f.attrs['NPTS'] = NPTS
+            f.attrs['NLMI'] = NLMI
+            f.attrs['NPOP'] = NPOP
 else:
-        NPTS = 900#300 #2000,4,400 used in original plots
-        NLMI = 3
-        NPOP = 400#40
+    # test points
+    NPTS = 900  #300 #2000,4,400 used in original plots
+    # number of constraints in a set:
+    NLMI = 3
+    # number of candidate sets of constraints in each generation of GA:
+    NPOP = 400   #40
+# TODO(KGF): what does NLMI stand for? number of linear MI??
+
+# number of total constraints in each generation:
 NCON = NLMI * NPOP
+# number of generations in GA:
+NGEN = 25
+# k=tournament size= number of individuals (sets of constrints) chosen from the
+# previous generation
 NTOURN = 4
+# number of best sets of constraints from NPOP to retain for next generation:
 NELITE = 10
+
 NFEATURES = 8
 disruptivity_threshold = 0.4#0.15
 
@@ -55,8 +66,11 @@ strm1 = driver.Stream() # create a GPU stream
 mod = driver.module_from_file("sori_kernel.cubin")
 mod_dprf = driver.module_from_file("dprf_kernel.cubin")
 init_kernel = mod.get_function("init")
+#print(init_kernel.num_regs)
 generate_test_points_kernel = mod.get_function("generate_test_points")
+#print(generate_test_points_kernel.num_regs)
 random_points_kernel = mod.get_function("random_points")
+#print(random_points_kernel.num_regs)
 evaluate_constraint_sos_kernel = mod.get_function("evaluate_constraint_sos")
 gpu_mmul_ABT_kernel = mod.get_function("gpu_mmul_ABT")
 evaluate_constraints_satisfied_kernel = mod.get_function("evaluate_constraints_satisfied")
@@ -117,7 +131,7 @@ weights = 40.0
 with h5py.File(shot_data_file, 'r') as hf:
     shot_data = hf['X'][()]
     shot_time = hf['time'][()]
-    print(shot_data.shape)
+    #print(shot_data.shape)  # shot 180808 = (20322, 8)
     print(shot_time.shape)
     current_operating_point = shot_data[0,:]
 
@@ -218,8 +232,10 @@ for i_data_index, data_index in enumerate(evaluation_indices):
         #cpu_disruptivity = d_disruptivity.get_async(stream = strm1).reshape((NPTS,1))
         cpu_disruptivity = d_total_result_scan.get_async(stream = strm1).reshape((NPTS,1))#/float(n_trees)
 
-        #print(d_feature_points.get_async(stream = strm1))
-        #print(cpu_disruptivity)
+        # print(f"dfeature_points={d_feature_points.get_async(stream = strm1)}")
+        # print(f"dfeature_points.shape={d_feature_points.get_async(stream = strm1).shape}") # (NFEATURES*NPTS, )
+        # print(f"cpu_disruptivity={cpu_disruptivity}")
+        # print(f"cpu_disruptivity.shape={cpu_disruptivity.shape}") # (NPTS, 1)
         #quit()
         if ((j_plot_points<len(generate_plot_indices)) and (data_index >= generate_plot_indices[j_plot_points])):
                 j_plot_points = j_plot_points + 1
